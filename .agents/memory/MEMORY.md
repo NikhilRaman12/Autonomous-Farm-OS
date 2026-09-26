@@ -1,0 +1,1 @@
+- [Vertical-slice farm architecture](vertical-slice-architecture.md) — build contract, deterministic policy, validated execution, and visible UI over one canonical state before adding more agents.

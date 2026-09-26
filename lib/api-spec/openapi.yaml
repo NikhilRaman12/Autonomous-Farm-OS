@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: farm
+    description: Autonomous farm operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,96 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /farm/state:
+    get:
+      operationId: getFarmState
+      tags: [farm]
+      summary: Get the canonical farm state
+      description: Returns the latest normalized simulator state.
+      responses:
+        "200":
+          description: Current farm state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FarmState"
+  /farm/recommendation:
+    get:
+      operationId: getFarmRecommendation
+      tags: [farm]
+      summary: Get the next autonomous recommendation
+      description: Returns a validated next action selected from the current state.
+      responses:
+        "200":
+          description: Current recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FarmRecommendation"
+  /farm/season-plan:
+    get:
+      operationId: getFarmSeasonPlan
+      tags: [farm]
+      summary: Get the active season master plan
+      description: Returns the current crop allocation, projected economics, and planning assumptions.
+      responses:
+        "200":
+          description: Active season plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeasonPlan"
+  /farm/market-decision:
+    get:
+      operationId: getFarmMarketDecision
+      tags: [farm]
+      summary: Get the current market decision
+      description: Compares selling now with holding inventory for a future market window.
+      responses:
+        "200":
+          description: Market decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketDecision"
+  /farm/agents/report:
+    get:
+      operationId: getFarmAgentsReport
+      tags: [farm]
+      summary: Get the multi-agent coordination report
+      description: Returns specialist agent recommendations and the central orchestrator decision.
+      responses:
+        "200":
+          description: Agent coordination report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentsReport"
+  /farm/actions/execute:
+    post:
+      operationId: executeFarmAction
+      tags: [farm]
+      summary: Execute a farm action
+      description: Validates and applies an action to the simulator state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FarmActionInput"
+      responses:
+        "200":
+          description: Action result with reconciled state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FarmActionResult"
+        "400":
+          description: Invalid or unsafe action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +125,162 @@ components:
           type: string
       required:
         - status
+    TemporalState:
+      type: object
+      required: [season, day, hour, remainingTurns]
+      properties:
+        season: { type: integer }
+        day: { type: integer }
+        hour: { type: integer }
+        remainingTurns: { type: integer }
+    FarmTile:
+      type: object
+      required: [id, x, y, status, crop, growth, moisture]
+      properties:
+        id: { type: string }
+        x: { type: integer }
+        y: { type: integer }
+        status: { type: string, enum: [ready, planted, growing, harvestable] }
+        crop: { type: ["string", "null"] }
+        growth: { type: integer }
+        moisture: { type: integer }
+    InventoryState:
+      type: object
+      required: [seeds, produce, fertilizer, capacity, used]
+      properties:
+        seeds: { type: integer }
+        produce: { type: integer }
+        fertilizer: { type: integer }
+        capacity: { type: integer }
+        used: { type: integer }
+    MarketState:
+      type: object
+      required: [crop, price, demand, trend]
+      properties:
+        crop: { type: string }
+        price: { type: number }
+        demand: { type: number }
+        trend: { type: string, enum: [rising, stable, falling] }
+    FinancialState:
+      type: object
+      required: [cash, revenue, expenses, projectedProfit]
+      properties:
+        cash: { type: number }
+        revenue: { type: number }
+        expenses: { type: number }
+        projectedProfit: { type: number }
+    FarmState:
+      type: object
+      required:
+        [temporal, land, tiles, inventory, market, financial, activeTasks, completedTasks, lastEvent]
+      properties:
+        temporal: { $ref: "#/components/schemas/TemporalState" }
+        land: { type: integer }
+        tiles:
+          type: array
+          items: { $ref: "#/components/schemas/FarmTile" }
+        inventory: { $ref: "#/components/schemas/InventoryState" }
+        market: { $ref: "#/components/schemas/MarketState" }
+        financial: { $ref: "#/components/schemas/FinancialState" }
+        activeTasks:
+          type: array
+          items: { type: string }
+        completedTasks:
+          type: array
+          items: { type: string }
+        lastEvent: { type: string }
+    FarmRecommendation:
+      type: object
+      required: [action, label, rationale, confidence, expectedValue, guardrails]
+      properties:
+        action: { type: string, enum: [WATER, PLANT, HARVEST, SELL, PASS] }
+        label: { type: string }
+        rationale: { type: string }
+        confidence: { type: number }
+        expectedValue: { type: number }
+        guardrails:
+          type: array
+          items: { type: string }
+    SeasonPlanCrop:
+      type: object
+      required: [crop, plots, expectedYield, projectedRevenue, confidence]
+      properties:
+        crop: { type: string }
+        plots: { type: integer }
+        expectedYield: { type: integer }
+        projectedRevenue: { type: number }
+        confidence: { type: number }
+    SeasonPlan:
+      type: object
+      required:
+        [season, objective, strategy, crops, projectedRevenue, projectedCost, projectedProfit, assumptions, riskLevel]
+      properties:
+        season: { type: integer }
+        objective: { type: string }
+        strategy: { type: string }
+        crops:
+          type: array
+          items: { $ref: "#/components/schemas/SeasonPlanCrop" }
+        projectedRevenue: { type: number }
+        projectedCost: { type: number }
+        projectedProfit: { type: number }
+        assumptions:
+          type: array
+          items: { type: string }
+        riskLevel: { type: string, enum: [low, moderate, high] }
+    MarketDecision:
+      type: object
+      required:
+        [decision, headline, rationale, quantity, expectedSellingValue, expectedFutureValue, signal, risk]
+      properties:
+        decision: { type: string, enum: [SELL_NOW, HOLD, PARTIAL_SELL, WAIT, BUY] }
+        headline: { type: string }
+        rationale: { type: string }
+        quantity: { type: integer }
+        expectedSellingValue: { type: number }
+        expectedFutureValue: { type: number }
+        signal: { type: string, enum: [strong, positive, neutral, weak] }
+        risk: { type: string, enum: [low, moderate, high] }
+    AgentStatus:
+      type: object
+      required: [agentId, role, status, objective, recommendation, confidence, blockers]
+      properties:
+        agentId: { type: string }
+        role: { type: string }
+        status: { type: string, enum: [observing, recommending, ready, blocked] }
+        objective: { type: string }
+        recommendation: { type: string }
+        confidence: { type: number }
+        blockers:
+          type: array
+          items: { type: string }
+    AgentsReport:
+      type: object
+      required: [orchestratorDecision, agents, lastReconciledAt]
+      properties:
+        orchestratorDecision: { type: string }
+        agents:
+          type: array
+          items: { $ref: "#/components/schemas/AgentStatus" }
+        lastReconciledAt: { type: string }
+    FarmActionInput:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [WATER, PLANT, HARVEST, SELL, PASS] }
+        tileId: { type: ["string", "null"] }
+        quantity: { type: ["integer", "null"], minimum: 1 }
+    FarmActionResult:
+      type: object
+      required: [success, message, state, recommendation]
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        state: { $ref: "#/components/schemas/FarmState" }
+        recommendation: { $ref: "#/components/schemas/FarmRecommendation" }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
 

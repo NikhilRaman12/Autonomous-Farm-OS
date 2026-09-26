@@ -1,6 +1,6 @@
-# [Project name]
+# Autonomous Farm OS
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+An autonomous Kaggriculture operations console that observes farm state, explains decisions, and executes validated simulator actions.
 
 ## Run & Operate
 
@@ -22,23 +22,35 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — source of truth for farm API contracts and generated hooks.
+- `artifacts/api-server/src/lib/farm-simulator.ts` — canonical in-memory simulator state, deterministic policy decisions, and action reconciliation.
+- `artifacts/api-server/src/routes/farm.ts` — farm state, recommendation, season-plan, market-decision, and execution routes.
+- `artifacts/farm-operations/src/App.tsx` — live operations console.
+- `artifacts/farm-operations/src/index.css` — console visual system and responsive layout.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first vertical slices use an in-memory simulator so the decision loop is observable and deterministic before persistence is introduced.
+- OpenAPI remains the contract boundary; generated React hooks and Zod schemas are used by the console and API.
+- Specialized planning outputs are read-only projections of the same canonical simulator state; action execution remains centralized and validated.
+- Market actions compare immediate sale value against future value and expose the rationale before execution.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Live farm state with temporal, land, inventory, financial, and market context.
+- Guarded next-action recommendation with compatible tile selection and visible action feedback.
+- Season master plan with crop allocation, projected economics, assumptions, and risk.
+- Market decision engine with sell-now versus future-value comparison.
+- Agent coordination report showing specialist recommendations and central authorization.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Build the autonomous farm system one complete vertical slice at a time.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Regenerate API clients with `pnpm --filter @workspace/api-spec run codegen` after every OpenAPI change.
+- The API server workflow owns the `/api` routes; the web workflow owns the root console.
 
 ## Pointers
 

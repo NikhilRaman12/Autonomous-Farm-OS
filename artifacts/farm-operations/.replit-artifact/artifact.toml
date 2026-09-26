@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Autonomous Farm OS"
+description = "A live farm operations console for monitoring canonical farm state, understanding autonomous recommendations, and executing validated simulator actions."
+version = "1.0.0"
+id = "artifacts/farm-operations"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18659
+
+[services.development]
+run = "pnpm --filter @workspace/farm-operations run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/farm-operations", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/farm-operations/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18659"
+BASE_PATH = "/"
