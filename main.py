@@ -1,7 +1,9 @@
-"""Kaggriculture competition agent for Autonomous Farm OS.
+"""AgriNexus OS — Multi-agent autonomous farm intelligence.
 
-Single-file, deterministic, no-network policy. The React/Express application in
-this repository is the observability/demo surface; Kaggle executes this file.
+Kaggriculture competition entry point. Specialist agents cooperate through a
+single deterministic arbitration layer: Crop, Livestock, Fertility, Market,
+Expansion, and Workforce. No network calls, model downloads, external state,
+or persistent runtime dependencies are required.
 """
 
 import math
@@ -23,8 +25,8 @@ BASE.update({"EGG": 50, "MILK": 160, "WOOL": 200, "FERTILIZER": 100})
 
 # Tuned operating envelope. These are deliberately conservative because the
 # ladder rewards wins, not raw margin, and the market is shared.
-COW_MAX, SHEEP_MAX, GOOSE_MAX = 8, 6, 0
-WHEAT_TILES, STRAW_TILES = 10, 16
+COW_MAX, SHEEP_MAX, GOOSE_MAX = 6, 5, 4
+CROP_TARGETS = {"WHEAT": 8, "CARROT": 4, "TOMATO": 4, "STRAWBERRY": 6, "MELON": 2}
 MAX_HANDS, MAX_QUADRANTS = 11, 2
 LAST_ANIMAL_DAY = 16
 HIRE_COSTS = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
@@ -123,14 +125,22 @@ def animal_buy_ok(a, day, cash, wheat_price, product_price):
     return net > 0 and cash >= info["cost"] + 250
 
 
-def desired_crop(day, prices, s):
-    # Feed is non-negotiable. Fill wheat first, then the demand-supported
-    # strawberry block. No melon: it has no shop sink and is highly glut-sensitive.
-    if day <= 25 and s["crop"].get("WHEAT", 0) < WHEAT_TILES:
-        return "WHEAT"
-    if day <= 19 and s["crop"].get("STRAWBERRY", 0) < STRAW_TILES:
-        return "STRAWBERRY"
-    return None
+def desired_crop(day, prices, s, seeds=None):
+    """Crop portfolio agent: diversify while protecting feed and season time."""
+    seeds = seeds or {}
+    candidates = []
+    for crop, info in CROPS.items():
+        have = s["crop"].get(crop, 0) + seeds.get(crop, 0)
+        deficit = max(0, CROP_TARGETS.get(crop, 0) - have)
+        if deficit <= 0 or day + info["first"] > 30:
+            continue
+        market_ratio = prices.get(crop, info["base"]) / max(1, info["base"])
+        feed_bonus = 1.35 if crop == "WHEAT" and live_count(s) else 0.0
+        deficit_bonus = deficit / max(1, CROP_TARGETS.get(crop, 1))
+        time_bonus = min(1.0, (30 - day) / max(1, info["maxday"])) * 0.35
+        score = info["weight"] * market_ratio + deficit_bonus + feed_bonus + time_bonus
+        candidates.append((score, crop))
+    return max(candidates)[1] if candidates else None
 
 
 def tasks(obs, me, private, s):
@@ -152,8 +162,10 @@ def tasks(obs, me, private, s):
             if not t.get("watered_today", False):
                 urgent = "RESCUE" if t.get("consecutive_unwatered", 0) >= 1 else "WATER"
                 result.append((P[urgent], p, ["WATER"], "WATER"))
-            if (t.get("crop") == "STRAWBERRY" and shed.get("FERTILIZER", 0) > 0
-                    and t.get("fertilized_until_day", -1) < day and 8 <= age <= 15):
+            if (t.get("crop") in ("CARROT", "TOMATO", "STRAWBERRY", "MELON")
+                    and shed.get("FERTILIZER", 0) > 0
+                    and t.get("fertilized_until_day", -1) < day
+                    and age >= max(2, CROPS[t.get("crop")]["first"] - 2)):
                 result.append((P["FERTILIZE"], p, ["FERTILIZE"], "FERTILIZE"))
         elif k in ("COOP", "PASTURE") and t.get("animal"):
             if not t.get("fed_today", False):
@@ -262,23 +274,23 @@ def market(obs, me, private, s):
         if ratio <= 0.30: n = 0
         if n: orders.append(["SELL", item, n])
 
-    # Seed buffer: never spend the herd's cash. Wheat first, strawberry second.
-    for crop, target in (("WHEAT", WHEAT_TILES), ("STRAWBERRY", STRAW_TILES)):
+    # Seed portfolio: buy only what is still missing, ranked by current market signal.
+    for crop in sorted(CROPS, key=lambda c: prices.get(c, CROPS[c]["base"]) / CROPS[c]["base"], reverse=True):
         if len(orders) >= 8 or day > 29 - CROPS[crop]["first"]:
             continue
         have = s["crop"].get(crop, 0) + seeds.get(crop, 0)
-        need = target - have
+        need = CROP_TARGETS.get(crop, 0) - have
         reserve = 500 + live * max(10, prices.get("WHEAT", 25))
         affordable = int(max(0, cash - reserve) // CROPS[crop]["seed"])
-        n = min(10, max(0, need), affordable)
+        n = min(5 if crop != "WHEAT" else 8, max(0, need), affordable)
         if n:
             orders.append(["BUY_SEED", crop, n])
             cash -= n * CROPS[crop]["seed"]
 
-    # Herd: cows first, then sheep. No geese in the production portfolio.
+    # Livestock portfolio: cows, sheep and geese provide milk, wool and eggs.
     st = stock(private)
     wheat_stock = shed.get("WHEAT", 0)
-    for a in ("COW", "SHEEP"):
+    for a in ("COW", "SHEEP", "GOOSE"):
         if len(orders) >= 9 or day > LAST_ANIMAL_DAY:
             break
         current = s["animals"][a] + st[a]
@@ -318,11 +330,44 @@ def market(obs, me, private, s):
 
 
 def _impl(obs):
+    """Observe → specialist proposals → arbitration → execution."""
     player = obs["player"]
     me = obs["farms"][player]
     private = obs.get("private", {}) or {}
     s = survey(me["tiles"])
-    work = tasks(obs, me, private, s)
+
+    # Specialist agents. Each produces proposals; none directly controls a unit.
+    crop_proposals = tasks(obs, me, private, s)  # Crop lifecycle + portfolio.
+    livestock_proposals = [
+        x for x in tasks(obs, me, private, s)
+        if x[3] in ("FEED", "CARE", "HARVEST", "BUILD", "PLACE", "FERT")
+    ]
+    fertility_proposals = [
+        x for x in tasks(obs, me, private, s)
+        if x[3] in ("FERT", "FERTILIZE")
+    ]
+
+    # Explicit crop portfolio proposal: variety is selected from deficits + market.
+    chosen = desired_crop(
+        obs["day"], obs.get("market", {}).get("prices", {}),
+        s, private.get("seeds", {})
+    )
+    if chosen and private.get("seeds", {}).get(chosen, 0) > 0:
+        for p in sorted(
+            s["empty"],
+            key=lambda q: min(dist(q, z) for z in shed_cells(len(me["tiles"])))
+        )[:2]:
+            crop_proposals.append((P["PLANT"], p, ["PLANT", chosen], "PLANT"))
+
+    # One arbitration layer removes conflicting specialist proposals.
+    proposals = {}
+    for proposal in crop_proposals + livestock_proposals + fertility_proposals:
+        priority, target, action, kind = proposal
+        key = (tuple(target), kind)
+        if key not in proposals or priority < proposals[key][0]:
+            proposals[key] = proposal
+    work = sorted(proposals.values(), key=lambda x: (x[0], x[1][1], x[1][0]))
+
     positions = [tuple(me["farmer"])] + [tuple(x) for x in me.get("hands", [])]
     assigned = assign(positions, work)
     inventories = private.get("inventories", []) or []
@@ -330,8 +375,13 @@ def _impl(obs):
     for i, pos in enumerate(positions):
         inv = inventories[i] if i < len(inventories) else {}
         actions.append(dispatch(pos, assigned[i], inv, private, len(me["tiles"])))
-    return {"farmer": actions[0] if actions else ["PASS"],
-            "hands": actions[1:], "market": market(obs, me, private, s)}
+
+    # Market/Expansion/Workforce agents share the same final economic envelope.
+    return {
+        "farmer": actions[0] if actions else ["PASS"],
+        "hands": actions[1:],
+        "market": market(obs, me, private, s),
+    }
 
 
 def agent(obs):
