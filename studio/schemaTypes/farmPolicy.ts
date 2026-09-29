@@ -1,4 +1,4 @@
-import {defineField, defineType} from 'sanity'
+import {defineArrayMember, defineField, defineType} from 'sanity'
 
 export const farmPolicy = defineType({
   name: 'farmPolicy',
@@ -11,5 +11,11 @@ export const farmPolicy = defineType({
     defineField({name: 'minimumDemandToSell', title: 'Minimum demand to sell', type: 'number', validation: r => r.required().min(0).max(1)}),
     defineField({name: 'inventoryReservePercent', title: 'Inventory reserve (%)', type: 'number', validation: r => r.required().min(0).max(100)}),
     defineField({name: 'notes', title: 'Operational notes', type: 'text'}),
+    defineField({
+      name: 'cropProfiles',
+      title: 'Managed crops',
+      type: 'array',
+      of: [defineArrayMember({type: 'reference', to: [{type: 'cropProfile'}]})],
+    }),
   ],
 })
