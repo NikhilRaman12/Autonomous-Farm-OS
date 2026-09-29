@@ -9,7 +9,7 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="AgriNexus OS",
+    page_title="AgriNexus Autonomous Farm",
     page_icon="🌱",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -265,13 +265,13 @@ f = get_state()
 decision, decision_label, lead_agent, rationale, confidence, value = collective_decision(f)
 
 with st.sidebar:
-    st.markdown("## 🌱 AgriNexus OS")
-    st.caption("Multi-Agent Autonomous Farm Intelligence")
+    st.markdown("## 🌱 AgriNexus Autonomous Farm")
+    st.caption("Autonomous Multi-Agent Farm Intelligence")
     st.divider()
     st.markdown("**Intelligence fabric**")
     workspace = st.radio(
         "View",
-        ["Farm State", "Agent Mesh", "Crop Intelligence", "Livestock", "Market", "Expansion"],
+        ["Autonomous Loop", "Agent Mesh", "Crop Intelligence", "Livestock", "Market", "Expansion"],
         label_visibility="collapsed",
     )
     st.divider()
@@ -280,7 +280,7 @@ with st.sidebar:
         st.success("main.py policy loaded")
     else:
         st.warning("Policy module unavailable")
-    st.caption("Competition entry remains dependency-free and isolated.")
+    st.caption("Competition entry remains dependency-free and isolated. This UI is an observability twin, not the competition agent.")
     st.divider()
     if st.button("↻ Reset farm twin", use_container_width=True):
         st.session_state.farm = FarmState()
@@ -288,9 +288,9 @@ with st.sidebar:
     st.caption("AgriNexus OS")
     st.caption("Specialist agents · shared state · one arbitration layer")
 
-st.markdown('<span class="eyebrow">AGRI NEXUS · AUTONOMOUS FARM INTELLIGENCE</span>', unsafe_allow_html=True)
+st.markdown('<span class="eyebrow">AGRI NEXUS · AUTONOMOUS MULTI-AGENT FARM</span>', unsafe_allow_html=True)
 st.title("AgriNexus OS")
-st.subheader("Specialist agents. One farm. Continuous adaptation.")
+st.subheader("The farm observes, reasons, arbitrates, acts, and learns.")
 st.caption(policy_tagline)
 
 k1,k2,k3,k4,k5 = st.columns(5)
@@ -306,7 +306,7 @@ left, right = st.columns([1.05, 1.35])
 
 with left:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<span class="eyebrow">Collective decision</span>', unsafe_allow_html=True)
+    st.markdown('<span class="eyebrow">Autonomous decision cycle</span>', unsafe_allow_html=True)
     st.title(decision_label)
     st.markdown(f'<span class="pill">LEAD · {lead_agent}</span>', unsafe_allow_html=True)
     st.write(rationale)
@@ -319,7 +319,7 @@ with left:
         "Turn budget respected",
     ]:
         st.write("✓ " + item)
-    if st.button(f"Execute {decision}", type="primary", use_container_width=True):
+    if st.button(f"Advance autonomous cycle · {decision}", type="primary", use_container_width=True):
         execute(f, decision)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -363,6 +363,15 @@ if workspace == "Agent Mesh":
                 unsafe_allow_html=True,
             )
     st.markdown('</div>', unsafe_allow_html=True)
+
+elif workspace == "Autonomous Loop":
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<span class="eyebrow">Autonomous operating loop</span>', unsafe_allow_html=True)
+    st.header("No farmer click is required")
+    st.write("The simulator twin demonstrates the same operating pattern as the competition policy: observe state → specialist proposals → arbitration → guardrails → action → reconciliation.")
+    st.code("OBSERVE → CROP / LIVESTOCK / FERTILITY / MARKET / EXPANSION / WORKFORCE → ARBITRATE → GUARDRAILS → ACT → RECONCILE", language="text")
+    st.info("Use the cycle control only to step the visual twin. The Kaggriculture submission itself runs from agent(obs) without a UI.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 elif workspace == "Crop Intelligence":
     st.markdown('<div class="card">', unsafe_allow_html=True)
