@@ -336,14 +336,19 @@ def _impl(obs):
     private = obs.get("private", {}) or {}
     s = survey(me["tiles"])
 
-    # Specialist agents. Each produces proposals; none directly controls a unit.
-    crop_proposals = tasks(obs, me, private, s)  # Crop lifecycle + portfolio.
+    # Specialist agents inspect one shared observation snapshot. No specialist
+    # directly controls a unit; proposals are arbitrated below.
+    all_proposals = tasks(obs, me, private, s)
+    crop_proposals = [
+        x for x in all_proposals
+        if x[3] in ("DIG", "HARVEST", "WATER", "FERTILIZE", "PLANT")
+    ]
     livestock_proposals = [
-        x for x in tasks(obs, me, private, s)
-        if x[3] in ("FEED", "CARE", "HARVEST", "BUILD", "PLACE", "FERT")
+        x for x in all_proposals
+        if x[3] in ("FEED", "CARE", "BUILD", "PLACE", "HARVEST")
     ]
     fertility_proposals = [
-        x for x in tasks(obs, me, private, s)
+        x for x in all_proposals
         if x[3] in ("FERT", "FERTILIZE")
     ]
 
