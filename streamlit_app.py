@@ -373,6 +373,15 @@ elif workspace == "Autonomous Loop":
     st.info("Use the cycle control only to step the visual twin. The Kaggriculture submission itself runs from agent(obs) without a UI.")
     st.markdown("</div>", unsafe_allow_html=True)
 
+elif workspace == "Autonomous Loop":
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<span class="eyebrow">Autonomous operating loop</span>', unsafe_allow_html=True)
+    st.header("No farmer click is required")
+    st.write("The simulator twin demonstrates the same operating pattern as the competition policy: observe state → specialist proposals → arbitration → guardrails → action → reconciliation.")
+    st.code("OBSERVE → CROP / LIVESTOCK / FERTILITY / MARKET / EXPANSION / WORKFORCE → ARBITRATE → GUARDRAILS → ACT → RECONCILE", language="text")
+    st.info("Use the cycle control only to step the visual twin. The Kaggriculture submission itself runs from agent(obs) without a UI.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
 elif workspace == "Crop Intelligence":
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<span class="eyebrow">Crop portfolio</span>', unsafe_allow_html=True)
