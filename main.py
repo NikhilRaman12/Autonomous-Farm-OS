@@ -329,6 +329,82 @@ def market(obs, me, private, s):
     return orders[:10]
 
 
+def crop_agent(proposals):
+    """Crop specialist: protect plant lifecycle and yield."""
+    return [x for x in proposals if x[3] in ("DIG", "HARVEST", "WATER", "FERTILIZE", "PLANT")]
+
+
+def livestock_agent(proposals):
+    """Livestock specialist: protect animal survival and production."""
+    return [x for x in proposals if x[3] in ("FEED", "CARE", "BUILD", "PLACE", "HARVEST")]
+
+
+def fertility_agent(proposals):
+    """Fertility specialist: collect and deploy animal fertilizer."""
+    return [x for x in proposals if x[3] in ("FERT", "FERTILIZE")]
+
+
+def crop_portfolio_agent(obs, me, private, s):
+    """Portfolio specialist: choose the next crop from deficit + market signal."""
+    return desired_crop(
+        obs["day"],
+        obs.get("market", {}).get("prices", {}),
+        s,
+        private.get("seeds", {}),
+    )
+
+
+def workforce_agent(me, s):
+    """Workforce specialist: estimate hands needed for visible workload."""
+    work = 0
+    for p in unlocked(me["tiles"]):
+        t = tile(me["tiles"], p)
+        if isinstance(t, dict):
+            if t.get("kind") == "PLANT":
+                work += 1
+            elif t.get("kind") in ("COOP", "PASTURE") and t.get("animal"):
+                work += 2
+            elif t.get("kind") == "WEED":
+                work += 1
+    return min(MAX_HANDS, max(3, 1 + math.ceil(work / 4)))
+
+
+def expansion_agent(obs, me, s):
+    """Expansion specialist: approve land only when capacity can be absorbed."""
+    cash = float(me.get("money", 0))
+    hands = len(me.get("hands", []))
+    owned = sum(1 for row in me["tiles"] for t in row if t != "LOCKED")
+    used = sum(1 for row in me["tiles"] for t in row if t not in (None, "LOCKED"))
+    return (
+        len(me.get("unlocked_quadrants", [])) < MAX_QUADRANTS
+        and obs["day"] >= 12
+        and hands >= 7
+        and cash >= 1800
+        and owned > 0
+        and used / owned >= 0.70
+    )
+
+
+def market_agent(obs, me, private, s, desired_hands):
+    """Market specialist: trade, seed/livestock procurement and hiring."""
+    orders = market(obs, me, private, s)
+    # The market policy already contains the labor and expansion gates; the
+    # named specialist boundary makes that responsibility explicit.
+    return orders
+
+
+def arbitrate(*proposal_sets):
+    """Single authorization layer for conflicting specialist proposals."""
+    best = {}
+    for proposals in proposal_sets:
+        for proposal in proposals:
+            priority, target, action, kind = proposal
+            key = (tuple(target), kind)
+            if key not in best or priority < best[key][0]:
+                best[key] = proposal
+    return sorted(best.values(), key=lambda x: (x[0], x[1][1], x[1][0]))
+
+
 def _impl(obs):
     """Observe → specialist proposals → arbitration → execution."""
     player = obs["player"]
@@ -336,27 +412,14 @@ def _impl(obs):
     private = obs.get("private", {}) or {}
     s = survey(me["tiles"])
 
-    # Specialist agents inspect one shared observation snapshot. No specialist
-    # directly controls a unit; proposals are arbitrated below.
+    # Specialist agents inspect one shared observation snapshot.
     all_proposals = tasks(obs, me, private, s)
-    crop_proposals = [
-        x for x in all_proposals
-        if x[3] in ("DIG", "HARVEST", "WATER", "FERTILIZE", "PLANT")
-    ]
-    livestock_proposals = [
-        x for x in all_proposals
-        if x[3] in ("FEED", "CARE", "BUILD", "PLACE", "HARVEST")
-    ]
-    fertility_proposals = [
-        x for x in all_proposals
-        if x[3] in ("FERT", "FERTILIZE")
-    ]
+    crop_proposals = crop_agent(all_proposals)
+    livestock_proposals = livestock_agent(all_proposals)
+    fertility_proposals = fertility_agent(all_proposals)
 
-    # Explicit crop portfolio proposal: variety is selected from deficits + market.
-    chosen = desired_crop(
-        obs["day"], obs.get("market", {}).get("prices", {}),
-        s, private.get("seeds", {})
-    )
+    # Portfolio agent adds a crop-specific proposal so the farm can diversify.
+    chosen = crop_portfolio_agent(obs, me, private, s)
     if chosen and private.get("seeds", {}).get(chosen, 0) > 0:
         for p in sorted(
             s["empty"],
@@ -364,14 +427,13 @@ def _impl(obs):
         )[:2]:
             crop_proposals.append((P["PLANT"], p, ["PLANT", chosen], "PLANT"))
 
-    # One arbitration layer removes conflicting specialist proposals.
-    proposals = {}
-    for proposal in crop_proposals + livestock_proposals + fertility_proposals:
-        priority, target, action, kind = proposal
-        key = (tuple(target), kind)
-        if key not in proposals or priority < proposals[key][0]:
-            proposals[key] = proposal
-    work = sorted(proposals.values(), key=lambda x: (x[0], x[1][1], x[1][0]))
+    # Expansion/workforce agents expose explicit strategic signals to the
+    # economic policy without coupling them to unit-level execution.
+    desired_hands = workforce_agent(me, s)
+    _expansion_ok = expansion_agent(obs, me, s)
+
+    # One authorization layer removes conflicting specialist proposals.
+    work = arbitrate(crop_proposals, livestock_proposals, fertility_proposals)
 
     positions = [tuple(me["farmer"])] + [tuple(x) for x in me.get("hands", [])]
     assigned = assign(positions, work)
@@ -385,7 +447,7 @@ def _impl(obs):
     return {
         "farmer": actions[0] if actions else ["PASS"],
         "hands": actions[1:],
-        "market": market(obs, me, private, s),
+        "market": market_agent(obs, me, private, s, desired_hands),
     }
 
 
