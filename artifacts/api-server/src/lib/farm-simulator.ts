@@ -93,59 +93,23 @@ export function getFarmAgentsReport(): AgentsReport {
   const recommendation = getFarmRecommendation();
   const thirsty = farmState.tiles.some((tile) => tile.status === "growing" && tile.moisture < 45);
   const harvestable = farmState.tiles.some((tile) => tile.status === "harvestable");
+  const hasProduce = farmState.inventory.produce > 0;
+  const ready = farmState.tiles.some((tile) => tile.status === "ready");
+  const active = farmState.tiles.filter((tile) => tile.status !== "ready").length;
   return {
     orchestratorDecision: `${recommendation.action}: ${recommendation.label}`,
     lastReconciledAt: `Season ${farmState.temporal.season}, day ${farmState.temporal.day}, ${String(farmState.temporal.hour).padStart(2, "0")}:00`,
     agents: [
-      {
-        agentId: "season-planning",
-        role: "Season planning",
-        status: "ready",
-        objective: "Protect season-level profit",
-        recommendation: "Keep existing land fully utilized before expansion",
-        confidence: 0.84,
-        blockers: [],
-      },
-      {
-        agentId: "crop-planning",
-        role: "Crop planning",
-        status: thirsty ? "recommending" : "ready",
-        objective: "Protect crop lifecycle and yield",
-        recommendation: thirsty ? "Water the lowest-moisture growing plot" : "Maintain current crop cadence",
-        confidence: thirsty ? 0.94 : 0.81,
-        blockers: thirsty ? ["Watering window is time-sensitive"] : [],
-      },
-      {
-        agentId: "market-analysis",
-        role: "Market analysis",
-        status: "ready",
-        objective: "Maximize selling value without price shock",
-        recommendation: farmState.inventory.produce > 0 ? "Use a partial sale at current demand" : "Hold until inventory is available",
-        confidence: 0.89,
-        blockers: [],
-      },
-      {
-        agentId: "resource-allocation",
-        role: "Resource allocation",
-        status: "ready",
-        objective: "Balance turns, inventory, and field capacity",
-        recommendation: "No hiring or land expansion is justified",
-        confidence: 0.88,
-        blockers: [],
-      },
-      {
-        agentId: "execution",
-        role: "Execution",
-        status: harvestable ? "recommending" : "ready",
-        objective: "Authorize only state-valid actions",
-        recommendation: `${recommendation.action} is the next validated action`,
-        confidence: recommendation.confidence,
-        blockers: recommendation.guardrails,
-      },
+      { agentId: "observation", role: "Observation Agent", status: "ready", objective: "Continuously reconcile the farm state", recommendation: `${active} active plots; ${farmState.inventory.used}/${farmState.inventory.capacity} inventory used`, confidence: 0.98, blockers: [] },
+      { agentId: "crop", role: "Crop Agent", status: thirsty || harvestable || ready ? "recommending" : "ready", objective: "Protect crop lifecycle and yield", recommendation: thirsty ? "Water the lowest-moisture growing plot" : harvestable ? "Harvest the ready crop" : ready ? "Plant the next portfolio crop" : "Maintain crop cadence", confidence: thirsty ? 0.94 : harvestable ? 0.98 : 0.86, blockers: [] },
+      { agentId: "livestock", role: "Livestock Agent", status: "ready", objective: "Feed, care for and harvest the animal economy", recommendation: "Protect animal production before discretionary spending", confidence: 0.91, blockers: [] },
+      { agentId: "fertility", role: "Fertility Agent", status: farmState.inventory.fertilizer > 0 ? "ready" : "blocked", objective: "Recycle animal output into crop yield", recommendation: farmState.inventory.fertilizer > 0 ? "Hold fertilizer for a high-leverage crop window" : "Await fertilizer generation", confidence: 0.88, blockers: farmState.inventory.fertilizer > 0 ? [] : ["No fertilizer currently available"] },
+      { agentId: "market", role: "Market Agent", status: hasProduce ? "recommending" : "ready", objective: "Trade against demand without creating a glut", recommendation: hasProduce ? "Use bounded partial sales while preserving future value" : "Hold and wait for harvest inventory", confidence: 0.89, blockers: [] },
+      { agentId: "expansion", role: "Expansion Agent", status: "ready", objective: "Invest capital only when capacity can be absorbed", recommendation: farmState.financial.cash >= 1800 && active >= 5 ? "Evaluate neighboring land" : "Defer land acquisition", confidence: 0.87, blockers: [] },
+      { agentId: "workforce", role: "Workforce Agent", status: "ready", objective: "Match labor capacity to visible workload", recommendation: "Route available hands to the highest-priority work queue", confidence: 0.92, blockers: [] },
     ],
   };
 }
-
 function advanceTime() {
   farmState.temporal.hour += 1;
   if (farmState.temporal.hour >= 24) {
