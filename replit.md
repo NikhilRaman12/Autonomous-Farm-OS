@@ -1,6 +1,6 @@
 # Autonomous Farm OS
 
-An autonomous Kaggriculture operations console that observes farm state, explains decisions, and executes validated simulator actions.
+An autonomous Kaggriculture agent with an observability control plane: specialist agents propose, an arbitrator authorizes, guardrails validate, and the farm executes and reconciles continuously.
 
 ## Run & Operate
 
@@ -32,16 +32,16 @@ An autonomous Kaggriculture operations console that observes farm state, explain
 
 - The first vertical slices use an in-memory simulator so the decision loop is observable and deterministic before persistence is introduced.
 - OpenAPI remains the contract boundary; generated React hooks and Zod schemas are used by the console and API.
-- Specialized planning outputs are read-only projections of the same canonical simulator state; action execution remains centralized and validated.
+- Specialized planning outputs are read-only projections of the same canonical simulator state; autonomous action execution remains centralized and validated.
 - Market actions compare immediate sale value against future value and expose the rationale before execution.
 
 ## Product
 
-- Live farm state with temporal, land, inventory, financial, and market context.
-- Guarded next-action recommendation with compatible tile selection and visible action feedback.
+- Live autonomous farm state with temporal, land, inventory, financial, and market context.
+- Autonomous next-action execution with human override, compatible tile validation, and visible reconciliation feedback.
 - Season master plan with crop allocation, projected economics, assumptions, and risk.
 - Market decision engine with sell-now versus future-value comparison.
-- Agent coordination report showing specialist recommendations and central authorization.
+- Agent council showing Observation, Crop, Livestock, Fertility, Market, Expansion, and Workforce responsibilities plus central authorization.
 
 ## User preferences
 
