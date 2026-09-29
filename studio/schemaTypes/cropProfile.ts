@@ -11,5 +11,17 @@ export const cropProfile = defineType({
     defineField({name: 'expectedYieldPerPlot', title: 'Expected yield per plot', type: 'number', validation: r => r.required().min(0)}),
     defineField({name: 'marketUnit', title: 'Market unit', type: 'string', validation: r => r.required()}),
     defineField({name: 'decisionRules', title: 'Decision rules', type: 'array', of: [defineArrayMember({type: 'string'})]}),
+    defineField({
+      name: 'protocols',
+      title: 'Operational protocols',
+      type: 'array',
+      of: [defineArrayMember({type: 'reference', to: [{type: 'fieldProtocol'}]})],
+    }),
+    defineField({
+      name: 'marketRule',
+      title: 'Market rule',
+      type: 'reference',
+      to: [{type: 'marketRule'}],
+    }),
   ],
 })
