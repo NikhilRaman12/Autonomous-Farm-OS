@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useExecuteFarmAction, useGetFarmAgentsReport, useGetFarmMarketDecision, useGetFarmRecommendation, useGetFarmSeasonPlan, useGetFarmState, useHealthCheck, getGetFarmStateQueryKey, getGetFarmRecommendationQueryKey, getGetFarmSeasonPlanQueryKey, getGetFarmMarketDecisionQueryKey, getGetFarmAgentsReportQueryKey, type FarmActionInputAction, type FarmState, type FarmRecommendation, type SeasonPlan, type MarketDecision, type AgentsReport } from '@workspace/api-client-react';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Check, ChevronRight, CircleDot, ClipboardList, Droplets, Leaf, Loader2, LockKeyhole, Package, RefreshCw, ScanLine, Sprout, Store, Sun, Tractor, TrendingUp, Wheat, Zap } from 'lucide-react';
@@ -27,13 +27,13 @@ function Sidebar({ health }: { health?: string }) {
     <aside className="sidebar">
       <div className="brand-lockup">
         <div className="brand-mark"><ScanLine size={20} strokeWidth={1.8} /></div>
-        <div><div className="brand-name">Fieldnode</div><div className="brand-sub">Autonomous Farm OS</div></div>
+        <div><div className="brand-name">AgriNexus</div><div className="brand-sub">Autonomous Farm OS</div></div>
       </div>
       <div className="sidebar-rule" />
       <div className="eyebrow sidebar-label">Workspace</div>
       <nav className="side-nav" aria-label="Primary navigation">
         <a className={`side-nav-item ${location === '/' ? 'is-active' : ''}`} href="/" data-testid="link-console">
-          <CircleDot size={16} /><span>Live console</span><span className="nav-live">LIVE</span>
+          <CircleDot size={16} /><span>Autonomous control</span><span className="nav-live">AUTO</span>
         </a>
       </nav>
       <div className="sidebar-bottom">
@@ -42,7 +42,7 @@ function Sidebar({ health }: { health?: string }) {
           <div className="system-line"><span className="pulse" />Simulator connected</div>
           <div className="system-meta mono">KAGG-OPS / 04</div>
         </div>
-        <div className="sidebar-foot"><LockKeyhole size={13} /> Operator mode · validated actions only</div>
+        <div className="sidebar-foot"><LockKeyhole size={13} /> Autonomous mode · human override available</div>
       </div>
     </aside>
   );
@@ -71,7 +71,7 @@ function Metric({ label, value, detail, tone = 'default', icon: Icon }: { label:
   </div>;
 }
 
-function RecommendationPanel({ recommendation, state, selectedTile, setSelectedTile, onExecute, isPending, feedback }: { recommendation: FarmRecommendation; state: FarmState; selectedTile: string | null; setSelectedTile: (id: string | null) => void; onExecute: (action: FarmActionInputAction, tileId: string | null, quantity: number | null) => void; isPending: boolean; feedback: { success: boolean; message: string } | null }) {
+function RecommendationPanel({ recommendation, state, selectedTile, setSelectedTile, onExecute, isPending, feedback, autopilot }: { recommendation: FarmRecommendation; state: FarmState; selectedTile: string | null; setSelectedTile: (id: string | null) => void; onExecute: (action: FarmActionInputAction, tileId: string | null, quantity: number | null) => void; isPending: boolean; feedback: { success: boolean; message: string } | null; autopilot: boolean }) {
   const [quantity, setQuantity] = useState(recommendation.action === 'SELL' ? Math.max(1, state.inventory.produce) : 1);
   const needsTile = actionNeedsTile(recommendation.action);
   const availableTiles = state.tiles.filter((tile) => isCompatibleTile(tile.status, recommendation.action));
@@ -79,7 +79,7 @@ function RecommendationPanel({ recommendation, state, selectedTile, setSelectedT
   const canExecute = !needsTile || Boolean(selectedTile);
   return (
     <section className="panel recommendation-panel fade-up" data-testid="panel-recommendation">
-      <div className="panel-kicker"><div className="signal-icon"><Zap size={16} /></div><span className="eyebrow">Orchestrator decision</span><span className="decision-line" /></div>
+      <div className="panel-kicker"><div className="signal-icon"><Zap size={16} /></div><span className="eyebrow">Autonomous decision</span><span className="decision-line" /></div>
       <div className="recommendation-head"><div><div className="recommendation-action">{titleCase(recommendation.action)}</div><h2>{recommendation.label}</h2></div><div className="confidence"><strong>{Math.round(recommendation.confidence * 100)}%</strong><span>confidence</span></div></div>
       <p className="rationale">{recommendation.rationale}</p>
       <div className="value-row"><div><span className="eyebrow">Expected value</span><strong className="value-positive">{recommendation.expectedValue >= 0 ? '+' : ''}{money(recommendation.expectedValue)}</strong></div><div className="guardrail-count"><LockKeyhole size={14} />{recommendation.guardrails.length} guardrails verified</div></div>
@@ -93,7 +93,7 @@ function RecommendationPanel({ recommendation, state, selectedTile, setSelectedT
       </div>}
       {(recommendation.action === 'SELL' || recommendation.action === 'PLANT') && <div className="quantity-control"><label htmlFor="action-quantity" className="eyebrow">{recommendation.action === 'SELL' ? 'Units to sell' : 'Seed units'}</label><input id="action-quantity" type="number" min={1} max={recommendation.action === 'SELL' ? state.inventory.produce : state.inventory.seeds} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} data-testid="input-action-quantity" /><span className="mono">/ {recommendation.action === 'SELL' ? state.inventory.produce : state.inventory.seeds} available</span></div>}
       <button className="execute-button" disabled={isPending || !canExecute || (recommendation.action === 'SELL' && state.inventory.produce < 1)} onClick={() => onExecute(recommendation.action, needsTile ? selectedTile : null, recommendation.action === 'SELL' || recommendation.action === 'PLANT' ? quantity : null)} data-testid="button-execute-action">
-        {isPending ? <><Loader2 size={17} className="spin" /> Validating action</> : <><Tractor size={17} /> Execute validated action <ChevronRight size={17} /></>}
+        {isPending ? <><Loader2 size={17} className="spin" /> Reconciling state</> : autopilot ? <><Zap size={17} /> Autonomous execution active</> : <><Tractor size={17} /> Human override: execute now <ChevronRight size={17} /></>}
       </button>
       {!canExecute && <div className="inline-help">Select a compatible tile to arm this action.</div>}
       {feedback && <div className={`action-feedback ${feedback.success ? 'feedback-success' : 'feedback-error'}`} data-testid="status-action-feedback"><span>{feedback.success ? <Check size={15} /> : <AlertTriangle size={15} />}</span>{feedback.message}</div>}
@@ -148,12 +148,12 @@ function SeasonPlanCard({ plan }: { plan: SeasonPlan }) {
 
 function AgentCoordinationCard({ report }: { report: AgentsReport }) {
   return <section className="panel agent-panel fade-up fade-up-delay-3" data-testid="panel-agent-coordination">
-    <div className="panel-header"><div><span className="eyebrow">Agent coordination</span><h2>One farm, five specialists</h2></div><Zap size={18} /></div>
-    <div className="orchestrator-readout"><span className="eyebrow">Central orchestrator authorization</span><strong>{report.orchestratorDecision}</strong><span className="mono">reconciled {report.lastReconciledAt}</span></div>
+    <div className="panel-header"><div><span className="eyebrow">Agent council</span><h2>Specialists reason. Arbitrator authorizes.</h2></div><Zap size={18} /></div>
+    <div className="autonomy-loop"><span>OBSERVE</span><b>→</b><span>PROPOSE</span><b>→</b><span>ARBITRATE</span><b>→</b><span>GUARDRAILS</span><b>→</b><span>ACT</span><b>→</b><span>RECONCILE</span></div>
+    <div className="orchestrator-readout"><span className="eyebrow">Central arbitration</span><strong>{report.orchestratorDecision}</strong><span className="mono">state reconciled · {report.lastReconciledAt}</span></div>
     <div className="agent-list">{report.agents.map((agent) => <div className="agent-row" key={agent.agentId}><div className={`agent-status agent-${agent.status}`}><span /></div><div className="agent-copy"><div><span className="eyebrow">{agent.role}</span><span className="agent-state">{titleCase(agent.status)}</span></div><strong>{agent.recommendation}</strong><span>{agent.objective}</span></div><div className="agent-confidence"><strong>{Math.round(agent.confidence * 100)}%</strong><span>confidence</span></div></div>)}</div>
   </section>;
 }
-
 function EventRail({ state }: { state: FarmState }) {
   const active = state.activeTasks ?? [];
   const completed = state.completedTasks ?? [];
@@ -179,6 +179,7 @@ function Console() {
   const executeAction = useExecuteFarmAction();
   const [selectedTile, setSelectedTile] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [autopilot, setAutopilot] = useState(true);
   const state = stateQuery.data;
   const recommendation = recommendationQuery.data;
   const seasonPlan = seasonPlanQuery.data;
@@ -190,6 +191,32 @@ function Console() {
     const compatible = actionNeedsTile(recommendation.action) ? state.tiles.find((tile) => isCompatibleTile(tile.status, recommendation.action)) : undefined;
     return selectedIsCompatible ? selectedTile : compatible?.id ?? null;
   }, [recommendation, selectedTile, state]);
+
+  useEffect(() => {
+    if (!autopilot || !recommendation || !state || executeAction.isPending || recommendation.action === "PASS") return;
+    const timer = window.setInterval(() => {
+      if (executeAction.isPending) return;
+      const needsTile = actionNeedsTile(recommendation.action);
+      const tile = needsTile ? state.tiles.find((candidate) => isCompatibleTile(candidate.status, recommendation.action)) : null;
+      if (needsTile && !tile) return;
+      executeAction.mutate({
+        data: {
+          action: recommendation.action,
+          tileId: tile?.id ?? null,
+          quantity: recommendation.action === "SELL" || recommendation.action === "PLANT" ? 1 : null,
+        },
+      }, {
+        onSuccess: (result) => {
+          queryClient.setQueryData(getGetFarmStateQueryKey(), result.state);
+          queryClient.setQueryData(getGetFarmRecommendationQueryKey(), result.recommendation);
+          void queryClient.invalidateQueries({ queryKey: getGetFarmAgentsReportQueryKey() });
+          setFeedback({ success: result.success, message: `Autopilot: ${result.message}` });
+        },
+        onError: (error) => setFeedback({ success: false, message: error instanceof Error ? error.message : "Autopilot action rejected." }),
+      });
+    }, 6500);
+    return () => window.clearInterval(timer);
+  }, [autopilot, recommendation, state, executeAction.isPending, queryClient]);
 
   const execute = (action: FarmActionInputAction, tileId: string | null, quantity: number | null) => {
     setFeedback(null);
@@ -210,9 +237,9 @@ function Console() {
   return <div className="console-content">
     <Header state={state} onRefresh={() => { void stateQuery.refetch(); void recommendationQuery.refetch(); void seasonPlanQuery.refetch(); void marketDecisionQuery.refetch(); void agentsReportQuery.refetch(); }} refreshing={stateQuery.isFetching || recommendationQuery.isFetching || seasonPlanQuery.isFetching || marketDecisionQuery.isFetching || agentsReportQuery.isFetching} />
     <main className="main-content">
-      <div className="console-heading fade-up"><div><div className="eyebrow heading-kicker"><span className="pulse" />Live simulator state <StatusPill tone={healthQuery.data?.status === 'ok' ? 'good' : 'warn'}>{healthQuery.data?.status === 'ok' ? 'API nominal' : 'API checking'}</StatusPill></div><h1>Farm command center</h1><p>Observe the system. Understand the decision. Commit when it checks out.</p></div><div className="turn-counter"><span className="eyebrow">Turns remaining</span><strong>{state.temporal.remainingTurns}</strong><span className="mono">next state auto-evaluated</span></div></div>
+      <div className="console-heading fade-up"><div><div className="eyebrow heading-kicker"><span className="pulse" />Autonomous farm loop <StatusPill tone={healthQuery.data?.status === 'ok' ? 'good' : 'warn'}>{healthQuery.data?.status === 'ok' ? 'SIMULATOR NOMINAL' : 'RECONNECTING'}</StatusPill></div><h1>The farm runs itself.</h1><p>Specialist agents observe, negotiate, arbitrate, act, and reconcile continuously.</p></div><div className="turn-counter"><span className="eyebrow">Turns remaining</span><strong>{state.temporal.remainingTurns}</strong><span className="mono">continuous autonomous cycle</span></div></div><div className="autonomy-banner"><div><span className="eyebrow">AUTONOMOUS OPERATING LOOP</span><strong>OBSERVE → REASON → NEGOTIATE → ARBITRATE → ACT → LEARN</strong><span>Human intervention is an explicit override, not the normal workflow.</span></div><button className="autonomy-toggle" onClick={() => setAutopilot((value) => !value)}>{autopilot ? 'AUTOPILOT ACTIVE · PAUSE' : 'AUTOPILOT PAUSED · RESUME'}</button></div>
       <div className="metric-strip fade-up fade-up-delay-1"><Metric label="Land" value={`${number(state.land)} plots`} detail={`${state.tiles.length} coordinates monitored`} icon={Leaf} /><Metric label="Cash on hand" value={money(state.financial.cash)} detail={`${money(state.financial.projectedProfit)} projected profit`} tone="positive" icon={TrendingUp} /><Metric label="Inventory" value={`${number(state.inventory.used)} / ${number(state.inventory.capacity)}`} detail={`${number(state.inventory.capacity - state.inventory.used)} units free`} icon={Package} /></div>
-      <div className="primary-grid"><RecommendationPanel recommendation={recommendation} state={state} selectedTile={selectedForRecommendation} setSelectedTile={setSelectedTile} onExecute={execute} isPending={executeAction.isPending} feedback={feedback} /><FarmMap state={state} selectedTile={selectedForRecommendation} setSelectedTile={setSelectedTile} /></div>
+      <div className="primary-grid"><RecommendationPanel recommendation={recommendation} state={state} selectedTile={selectedForRecommendation} setSelectedTile={setSelectedTile} onExecute={execute} isPending={executeAction.isPending} feedback={feedback} autopilot={autopilot} /><FarmMap state={state} selectedTile={selectedForRecommendation} setSelectedTile={setSelectedTile} /></div>
       <div className="context-grid"><FinanceCard state={state} /><MarketCard state={state} decision={marketDecision} /><InventoryCard state={state} /></div>
       <SeasonPlanCard plan={seasonPlan} />
       <AgentCoordinationCard report={agentsReport} />
