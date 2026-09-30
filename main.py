@@ -63,6 +63,7 @@ MARKET = {
 HOLD = {"MELON": 0.30, "STRAWBERRY": 0.35, "MILK": 0.35, "WOOL": 0.35, "TOMATO": 0.40,
         "CARROT": 0.40, "EGG": 0.45, "FERTILIZER": 0.12, "WHEAT": 0.60}
 
+LOCAL_TESTING = False    # Set to False for competition
 _ERR = []               # diagnostics only (tests assert it stays empty)
 
 
@@ -256,7 +257,14 @@ def animal_margin(s, atype, extra=None):
     x_fert = s.minv.get("FERTILIZER", I0) + oth["FERTILIZER"]
     v = rev(s.P, prod, x_prod, int(prod_u)) + rev(s.P, "FERTILIZER", x_fert, int(fert_u))
     wheat_cost = max(0, 29 - d) * p_now(s, "WHEAT") * 1.25
-    return v - info["cost"] - wheat_cost, info["cost"]
+    
+    # Worker action cost (Phase 3 Economics):
+    # 1 action to build/place + 1 FEED and 1 CARE per day + 1 HARVEST per product + 1 COLLECT per day
+    days_alive = max(0, 29 - d)
+    actions = 1 + (2 * days_alive) + prod_u + days_alive
+    worker_action_cost = actions * 3.5  # Approx 3.5 money per worker action
+    
+    return v - info["cost"] - wheat_cost - worker_action_cost, info["cost"]
 
 
 def crop_margin(s, crop, extra_units=0):
@@ -277,53 +285,78 @@ def crop_margin(s, crop, extra_units=0):
         stock_need = s.n_animals * 3
         if s.wheat + standing < stock_need:
             val = max(val, feed_value)
-    return val - cd["seed"], h, units
+            
+    # Worker action cost (Phase 3 Economics):
+    # 1 PLANT + (h/2) WATER + 1 HARVEST
+    actions = 1 + (h / 2.0) + 1
+    worker_action_cost = actions * 3.5
+    
+    return val - cd["seed"] - worker_action_cost, h, units
 
 
 # --------------------------------------------------------------------------
 # specialists -> market proposals
 # --------------------------------------------------------------------------
 def market_agent_sells(s):
-    """Reservation-price selling of shed stock. Returns (orders, est_proceeds)."""
+    """Dynamic Marginal Revenue selling and Terminal Liquidation."""
     orders, proceeds = [], 0.0
     crowded = s.shed_total > 88
+    
+    # Terminal mode check
+    is_terminal = (s.day >= 28)
+    
     for item in PRODUCTS:
         stock = s.shed.get(item, 0)
         if stock <= 0:
             continue
+            
         keep = 0
         if item == "WHEAT":
-            if s.day <= 27:
+            if not is_terminal:
                 keep = s.n_animals + 3
-            elif s.day == 28:
-                keep = sum(1 for _, t in s.animals if not t.get("fed_today")) + 1
+            else:
+                # On day 28/29, only keep exactly enough for remaining feeds
+                unfed = sum(1 for _, t in s.animals if not t.get("fed_today"))
+                keep = unfed + (1 if s.day == 28 else 0)
+                
         stock -= keep
         if stock <= 0:
             continue
+            
         base = s.P[item]["base"]
-        frac = HOLD.get(item, 0.3)
-        if s.day >= 27:
-            frac *= 0.5
-        if s.day >= 28:
-            frac *= 0.3
-        if s.final:
-            frac = 0.0
-        if crowded:
-            frac *= 0.5
-        floor_p = max(1.0, base * frac)
+        
+        # Calculate dynamic floor
+        if is_terminal:
+            floor_p = 1.0 # Liquidate everything for whatever we can get
+        else:
+            base_frac = HOLD.get(item, 0.3)
+            # Adjust based on inventory pressure and time left
+            if crowded:
+                base_frac *= 0.5
+            
+            # As the season progresses past day 20, we gradually lower standards
+            if s.day > 20:
+                base_frac *= max(0.4, (28 - s.day) / 8.0)
+                
+            floor_p = max(1.0, base * base_frac)
+            
         x = s.minv.get(item, I0)
         k, got = 0, 0
+        
+        # Marginal Revenue evaluation
         while k < stock:
             p = price(s.P, item, x)
             if p < floor_p:
-                break
+                break # Stop selling, marginal revenue is too poor
             got += p
             k += 1
             if p > 1:
                 x += 1
+                
         if k > 0:
             orders.append(("SELL", item, k, got))
             proceeds += got
+            
     orders.sort(key=lambda o: -o[3])
     return orders, proceeds
 
@@ -449,9 +482,11 @@ def market_council(s):
     slots = slots_free(s)
     reserve = 60 + 6 * s.n_animals
     avail = budget - spent - reserve
+    is_terminal = (s.day >= 28)
 
     props = []
-    if not s.final and s.left > 30:
+    # STOP speculative investment in terminal mode
+    if not is_terminal and not s.final and s.left > 30:
         for roi, a, net, cost in livestock_proposals(s, slots, avail):
             props.append((roi, "animal", a, cost))
         for roi, c, net, cost in crop_proposals(s, slots, avail):
@@ -481,7 +516,7 @@ def market_council(s):
         orders.append(["BUY_SEED", c, n])
 
     # Expansion
-    if not s.final and len(orders) < 9 and s.hour <= 3:
+    if not is_terminal and not s.final and len(orders) < 9 and s.hour <= 3:
         lp = land_proposal(s, slots, avail)
         if lp:
             orders.append(["BUY_LAND"])
@@ -762,6 +797,8 @@ def _safe(fn, default, *a):
     try:
         return fn(*a)
     except Exception as e:          # isolate one specialist, never the whole farm
+        if LOCAL_TESTING:
+            raise
         _ERR.append((fn.__name__, repr(e)))
         return default
 
@@ -780,6 +817,8 @@ def agent(obs):
     try:
         return plan(obs)
     except Exception as e:
+        if LOCAL_TESTING:
+            raise
         _ERR.append(("plan", repr(e)))
         try:
             me = obs["farms"][obs.get("player", 0)]
