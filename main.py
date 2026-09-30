@@ -138,7 +138,8 @@ def desired_crop(day, prices, s, seeds=None):
         feed_bonus = 1.35 if crop == "WHEAT" and live_count(s) else 0.0
         deficit_bonus = deficit / max(1, CROP_TARGETS.get(crop, 1))
         time_bonus = min(1.0, (30 - day) / max(1, info["maxday"])) * 0.35
-        # Deterministic portfolio score: market signal + crop deficit + feed value + time runway.\n        score = market_ratio + deficit_bonus + feed_bonus + time_bonus
+        # Deterministic portfolio score: market signal + crop deficit + feed value + time runway.
+        score = market_ratio + deficit_bonus + feed_bonus + time_bonus
         candidates.append((score, crop))
     return max(candidates)[1] if candidates else None
 
