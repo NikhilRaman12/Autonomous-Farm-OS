@@ -38,9 +38,9 @@ BASE.update({"EGG": 50, "MILK": 160, "WOOL": 200, "FERTILIZER": 100})
 
 # Conservative production envelope. It is intentionally dynamic: these are
 # ceilings, not promises to buy all assets.
-ANIMAL_CAP = {"COW": 5, "SHEEP": 7, "GOOSE": 4}
-CROP_PLAN = {"WHEAT": 14, "MELON": 8, "STRAWBERRY": 4, "CARROT": 3}
-MAX_HANDS = 8
+ANIMAL_CAP = {"COW": 9, "SHEEP": 4, "GOOSE": 0}
+CROP_PLAN = {"WHEAT": 4, "MELON": 20, "STRAWBERRY": 15, "TOMATO": 15, "CARROT": 8}
+MAX_HANDS = 10
 MAX_ORDERS = 10
 SEASON_END = 29
 WHEAT_FLOOR = 18
@@ -160,8 +160,12 @@ def ready(t, day):
         return False
     c = t.get("crop")
     info = CROPS.get(c)
-    return bool(info and t.get("yield_units", 0) > 0 and
-                day - t.get("planted_day", day) >= info["first"])
+    if not info or not t.get("yield_units", 0):
+        return False
+    age = day - t.get("planted_day", day)
+    if info["ongoing"]:
+        return age >= info["first"]
+    return age >= info["maxday"]
 
 
 def days_left(day):
@@ -257,7 +261,7 @@ def crop_tasks(obs, me, private, s):
             key=lambda q: min(dist(q, z) for z in shed_cells(len(me["tiles"])))
         )
         # Batch planting is bounded by active units, preventing an overbuilt field.
-        n = min(seeds[chosen], len(near), len(me.get("hands", [])) + 1, 4)
+        n = min(seeds[chosen], len(near), len(me.get("hands", [])) + 1)
         for p in near[:n]:
             jobs.append((PRIO["PLANT"], p, ["PLANT", chosen], "PLANT"))
     return jobs
@@ -290,7 +294,7 @@ def livestock_tasks(obs, me, private, s):
     shed = private.get("shed", {})
     wheat = shed.get("WHEAT", 0)
 
-    for animal in ("SHEEP", "COW", "GOOSE"):
+    for animal in ("COW", "SHEEP"):
         cap = ANIMAL_CAP[animal]
         if totals[animal] >= cap:
             continue
@@ -310,7 +314,6 @@ def livestock_tasks(obs, me, private, s):
             continue
         p = free.pop(0)
         jobs.append((PRIO["BUILD"], p, [info["build"]], "BUILD"))
-        jobs.append((PRIO["PLACE"], p, ["PLACE", animal], "PLACE"))
         cash -= info["cost"]
         totals[animal] += 1
 
@@ -463,7 +466,7 @@ def market_orders(obs, me, private, s):
     # for products and fertilizer; geese are short-cycle but not forced.
     if len(orders) < MAX_ORDERS and day <= 16:
         totals = animal_total(s, private)
-        for animal in ("SHEEP", "COW", "GOOSE"):
+        for animal in ("COW", "SHEEP"):
             if len(orders) >= MAX_ORDERS:
                 break
             if totals[animal] >= ANIMAL_CAP[animal]:
@@ -488,11 +491,11 @@ def market_orders(obs, me, private, s):
     # workload justifies the marginal throughput. Cheap early hands are useful.
     workload = work_size(me)
     current = len(me.get("hands", []))
-    desired = min(MAX_HANDS, max(1, math.ceil(workload / 5)))
+    desired = min(MAX_HANDS, max(1, math.ceil(workload / 6)))
     if day <= 4:
         desired = min(MAX_HANDS, max(desired, 2))
     if day >= 25:
-        desired = min(desired, 4)
+        desired = min(desired, 6)
 
     # Hiring cost rises for each additional hand on that day.
     # We stop before the next cost would consume the operating buffer.
@@ -510,9 +513,9 @@ def market_orders(obs, me, private, s):
     # Expansion specialist: only buy a quadrant if there is enough season left
     # to operate it and cash remains healthy after the purchase.
     q = len(me.get("unlocked_quadrants", []))
-    if len(orders) < MAX_ORDERS and q < 3 and day in (10, 18):
+    if len(orders) < MAX_ORDERS and q < 3 and day in (6, 12, 18):
         land_cost = 1000 if q == 1 else 2000
-        if day <= 18 and money >= land_cost + 1500:
+        if day <= 18 and work_size(me) >= 8 and money >= land_cost + 1800:
             orders.append(["BUY_LAND"])
 
     # Final-day liquidity: no growth purchases; sell every valuable product.
